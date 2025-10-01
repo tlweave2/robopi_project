@@ -10,13 +10,13 @@ My Raspberry Pi robot that follows people around and is extra nice to my girlfri
 
 ## Parts List
 
-- Pi 4 8GB (overkill but whatever)
+- Pi 4 8GB 
 - Old WD Passport drive (1TB)
 - GoPro Hero 7 (borrowed permanently)
 - USB mic that was in a drawer
 - Bluetooth speaker
 - Ryobi drill battery (18V 5Ah - lasts forever)
-- 2 motors with encoders from Amazon
+- 2 motors with encoders from Aliexpress
 - Random mini monitor for debugging
 - **All chassis/mounts/brackets 3D designed and printed by me**
 
