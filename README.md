@@ -1,48 +1,82 @@
 # Eddie Haskell Robot
 
-My Raspberry Pi robot that follows people around and is extra nice to my girlfriend Sara Jane.
+A Raspberry Pi robot that finds faces, recognizes who it is looking at and follows them around. I designed and 3D printed the chassis and wrote the vision and motor control software. It started as a weekend project and it got out of hand.
 
-## What It Does
+The name comes from the Leave It to Beaver character. Eddie is extra polite to the people he knows and pretty indifferent to everyone else.
 
-- Sees faces with the GoPro and follows you around
-- Super polite to Sara Jane, normal with everyone else
-- Built from stuff I had laying around plus some motor parts
+## What it does
 
-## Parts List
+- Detects faces in real time on the Pi with MediaPipe BlazeFace at 640×480.
+- Sends each face crop to a recognition server on my laptop and gets back a name and a confidence score.
+- Works out where the person is (LEFT, CENTER or RIGHT) and how close they are (NEAR, MEDIUM or FAR) from the face box.
+- Turns toward the person and drives closer when they are far away.
+- Picks a greeting based on how confident the match is.
 
-- Pi 4 8GB 
-- Old WD Passport drive (1TB)
-- GoPro Hero 7 (borrowed permanently)
-- USB mic that was in a drawer
-- Bluetooth speaker
-- Ryobi drill battery (18V 5Ah - lasts forever)
-- 2 motors with encoders from Aliexpress
-- Random mini monitor for debugging
-- **All chassis/mounts/brackets 3D designed and printed by me**
+## How it works
 
-## Getting It Running
+The work is split between the Pi and a desktop machine on the same network. The Pi handles the fast work that has to happen on the robot. The desktop handles the heavy recognition model.
 
-Laptop side:
+```
+ Camera ─► Pi agent (pi_agent/pi_agent.py)
+            │  MediaPipe face detection
+            │  position + distance estimate
+            │  160×160 face crop
+            ▼
+        HTTP POST /recognize  (~100 ms over LAN, 0.5 s timeout)
+            ▼
+        Desktop server (desktop_server/server.py)
+            │  InsightFace embeddings
+            │  cosine similarity against an NPZ face gallery
+            ▼
+        { name, confidence } ─► Pi agent ─► motor control (pigpio PWM)
+```
+
+**Pi agent**
+- `VisionTools` runs detection and builds an observer state string like `Tim CENTER NEAR (0.86)` that the decision loop reads.
+- `MotorControl` drives two encoder motors with pigpio PWM. The left and right speeds are calibrated separately so it drives straight. Every move is safety clamped (90° max turn and 2 s max move) and the motors always stop on exit.
+- `RoboPiAgent` runs the follow loop at about 2 Hz. It has a milestone test mode that logs detections and FPS.
+- If the desktop server cannot be reached the agent falls back to "Unknown" and keeps running.
+
+**Desktop server**
+- A Flask API with `/recognize`, `/enroll`, `/gallery`, `/backup` and `/health`.
+- It uses InsightFace when it is installed and falls back to OpenCV LBPH if it is not.
+- Enrolled faces are saved to an NPZ gallery and backed up on every enroll.
+
+## Hardware
+
+- Raspberry Pi 4 (8GB)
+- GoPro Hero 7 as the camera
+- 2 DC motors with encoders and a dual motor driver
+- Ryobi 18V 5Ah drill battery for power. It lasts a long time.
+- USB mic, Bluetooth speaker and a small monitor for debugging
+- 1TB external drive for storage
+- Custom chassis, battery adapters, Pi case and mounts that I designed and 3D printed. The STL files are in [`robot/`](robot/).
+
+## Running it
+
+Desktop side:
+
 ```bash
-git clone https://github.com/tlweave2/robopi_project.git
 pip install flask opencv-contrib-python numpy insightface
-python desktop_server/src/recognition_server.py
+python desktop_server/server.py        # listens on port 8080
 ```
 
-Pi side:
+Pi side (needs the pigpio daemon running):
+
 ```bash
-# Same repo, then:
+sudo pigpiod
 pip install opencv-python mediapipe numpy requests pigpio
-python pi_agent/src/robopi_agent.py
+python pi_agent/pi_agent.py --mode milestone --duration 30   # detection test
+python pi_agent/pi_agent.py --mode follow --duration 60      # follow a person
 ```
 
-## The Gimmick
+Set `desktop_server_url` in `config/vision_config.json` to your desktop's IP address. The config files are created with default values on the first run.
 
-When Eddie sees Sara Jane: *"Good afternoon Miss Sara Jane, you look wonderful today!"*
+## What I would do next
 
-When he sees me: *"Oh hey."*
+- Use the wheel encoders for closed loop turns instead of timed turns.
+- Add a search behavior when no one is in view.
+- Hook the greetings up to text to speech on the speaker.
+- Move recognition onto the Pi with a smaller model so it can run without the desktop.
 
-That's it. Works pretty well when the lighting doesn't suck.
-
----
-*Weekend project that got out of hand*
+It works pretty well as long as the lighting is decent.
